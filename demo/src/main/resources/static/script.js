@@ -75,7 +75,7 @@ async function loadData() {
     try {
         const tbody = document.getElementById('dataTableBody');
         const recordCount = document.getElementById('recordCount');
-        tbody.innerHTML = '<tr><td colspan="14" class="no-data">⏳ Đang tải dữ liệu...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="no-data">⏳ Đang tải dữ liệu...</td></tr>'; // Tăng colspan từ 14 lên 15
         recordCount.textContent = 'Đang tải...';
 
         // Lấy ngày từ datePicker
@@ -102,7 +102,7 @@ async function loadData() {
     } catch (error) {
         const tbody = document.getElementById('dataTableBody');
         const recordCount = document.getElementById('recordCount');
-        tbody.innerHTML = '<tr><td colspan="14" class="no-data">❌ Không thể tải dữ liệu</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="no-data">❌ Không thể tải dữ liệu</td></tr>'; // Tăng colspan từ 14 lên 15
         recordCount.textContent = 'Lỗi tải dữ liệu';
         console.error(error);
     }
@@ -166,13 +166,14 @@ function renderTable() {
     const recordCount = document.getElementById('recordCount');
     
     if (filteredData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" class="no-data">Không tìm thấy dữ liệu</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="no-data">Không tìm thấy dữ liệu</td></tr>'; // Tăng colspan từ 14 lên 15
         recordCount.textContent = 'Tổng: 0 bản ghi';
         return;
     }
 
-    const rows = filteredData.map(item => `
+    const rows = filteredData.map((item, index) => `
         <tr>
+            <td class="col-stt">${index + 1}</td>
             <td class="col-id">${item.id || item._id || ''}</td>
             <td class="col-serial">${item.serial || ''}</td>
             <td class="col-device-code">${item.deviceCode || ''}</td>

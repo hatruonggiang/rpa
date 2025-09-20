@@ -13,6 +13,8 @@ import static org.springframework.data.mongodb.core.aggregation.Aggregation.*;
 import com.example.demo.Entity.LogDevice;
 import com.example.demo.Entity.LogDeviceStats;
 import com.example.demo.Repository.LogDeviceRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -38,18 +40,27 @@ import java.io.IOException;
 public class LogDeviceService {
     
     private final LogDeviceRepository repo;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     
     @Autowired
     private MongoTemplate mongoTemplate;
 
     // Danh sách các key cần phân tích từ log
+    // private static final List<String> KEYS = Arrays.asList(
+    //     "on_relay1:false", "on_relay2:false", "on_relay3:false", "on_relay4:false",
+    //     "off_relay1:false", "off_relay2:false", "off_relay3:false", "off_relay4:false",
+    //     "on_all:false", "off_all:false", "remote_learn:false", "remote_control:false",
+    //     "open:false", "close:false", "stop:false",
+    //     "remote_control_close:false", "remote_control_open:false", "remote_control_stop:false"
+    // );
     private static final List<String> KEYS = Arrays.asList(
-        "on_relay1:false", "on_relay2:false", "on_relay3:false", "on_relay4:false",
-        "off_relay1:false", "off_relay2:false", "off_relay3:false", "off_relay4:false",
-        "on_all:false", "off_all:false", "remote_learn:false", "remote_control:false",
-        "open:false", "close:false", "stop:false",
-        "remote_control_close:false", "remote_control_open:false", "remote_control_stop:false"
-    );
+    "on_relay1:false", "on_relay2:false", "on_relay3:false", "on_relay4:false",
+    "off_relay1:false", "off_relay2:false", "off_relay3:false", "off_relay4:false", 
+    "on_all:false", "off_all:false", "remote_learn:false", "remote_control:false",
+    "open:false", "close:false", "stop:false",
+    "remote_control_close:false", "remote_control_open:false", "remote_control_stop:false"
+);
 
     public LogDeviceService(LogDeviceRepository repo) {
         this.repo = repo;
@@ -65,8 +76,8 @@ public class LogDeviceService {
         DateTimeFormatter inputFormatter = DateTimeFormatter.ofPattern("ddMMyyyy");
         LocalDate localDate = LocalDate.parse(dateString, inputFormatter);
 
-        Instant start = localDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-        Instant end = localDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
+        Instant start = localDate.atStartOfDay(VIETNAM_ZONE).toInstant();
+        Instant end = localDate.plusDays(1).atStartOfDay(VIETNAM_ZONE).toInstant();
 
         return repo.findByCreatedTimeBetween(start, end);
     }
@@ -83,8 +94,8 @@ public class LogDeviceService {
         LocalDate localDate = LocalDate.parse(dateString, inputFormatter);
 
         // Tạo khoảng thời gian từ đầu ngày đến đầu ngày hôm sau
-        Instant start = localDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-        Instant end = localDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
+        Instant start = localDate.atStartOfDay(VIETNAM_ZONE).toInstant();
+        Instant end = localDate.plusDays(1).atStartOfDay(VIETNAM_ZONE).toInstant();
 
         Aggregation agg = newAggregation(
                 // Lọc theo ngày và statusTestCase = 1 hoặc 2
@@ -168,23 +179,86 @@ public class LogDeviceService {
 
     /**
      * Hàm đếm tương đương COUNTIFS trong Excel
-     * Excel: =COUNTIFS($E:$E,$S18,$K:$K,"*off_all:false*")
-     * Java tương đương:
+     * Phân tích JSON thay vì string matching
      * 
      * @param devices danh sách thiết bị
-     * @param targetMac MAC địa chỉ cần tìm
-     * @param targetKey key cần tìm trong log
+     * @param targetMac MAC địa chỉ cần tìm  
+     * @param targetKey key cần tìm trong JSON
      * @return số lượng bản ghi phù hợp
      */
     private int countMatchingRecords(List<LogDevice> devices, String targetMac, String targetKey) {
-        return (int) devices.stream()
-                .filter(device -> targetMac.equals(device.getMacHc()))          // $E:$E=$S18
-                .filter(device -> {                                             
+    return (int) devices.stream()
+            .filter(device -> targetMac.equals(device.getMacHc()))
+            .filter(device -> {
+                try {
                     String log = device.getLog();
-                    return log != null && log.toLowerCase().contains(targetKey.toLowerCase()); // $K:$K="*key*"
-                })
-                .count();
+                    if (log == null || log.trim().isEmpty()) {
+                        return false;
+                    }
+                    return checkKeyInJsonLog(log, targetKey);
+                    
+                } catch (Exception e) {
+                    // KHÔNG fallback về string matching nữa, trả về false
+                    System.err.println("Error processing log for MAC " + targetMac + 
+                                     ", key " + targetKey + ": " + e.getMessage());
+                    return false;
+                }
+            })
+            .count();
+}
+    /**
+     * Kiểm tra key trong JSON log
+     * 
+     * @param jsonLog chuỗi JSON log
+     * @param targetKey key cần tìm
+     * @return true nếu tìm thấy key với giá trị true
+     */
+private boolean checkKeyInJsonLog(String jsonLog, String targetKey) {
+    try {
+        JsonNode rootNode = objectMapper.readTree(jsonLog);
+
+        // Nếu root chỉ là 1 text node (JSON bị double-encoded) thì parse lại
+        if (rootNode.isTextual()) {
+            rootNode = objectMapper.readTree(rootNode.asText());
+        }
+
+        JsonNode deviceArray = rootNode.path("data").path("device");
+        if (!deviceArray.isArray()) {
+            return false;
+        }
+
+        // Tách targetKey để lấy key name và expected value
+        // VD: "on_relay1:false" -> key="on_relay1", expectedValue="false"
+        String[] parts = targetKey.split(":", 2);
+        if (parts.length != 2) {
+            return false; // Format không đúng
+        }
+        
+        String keyName = parts[0];
+        boolean expectedValue = Boolean.parseBoolean(parts[1]);
+
+        for (JsonNode deviceNode : deviceArray) {
+            JsonNode keyNode = deviceNode.path(keyName);
+            if (!keyNode.isMissingNode() && keyNode.isBoolean() && 
+                keyNode.asBoolean() == expectedValue) {
+                return true;
+            }
+        }
+        return false;
+
+    } catch (Exception e) {
+        System.err.println("Error parsing JSON log: " + e.getMessage());
+        return false;
     }
+}
+
+
+
+
+
+
+
+
 
     /**
      * Xuất dữ liệu LogDevice ra Excel
@@ -238,10 +312,10 @@ public class LogDeviceService {
             row.createCell(9).setCellValue(device.getRqi() != null ? device.getRqi() : "");
             row.createCell(10).setCellValue(device.getLog() != null ? device.getLog() : "");
             row.createCell(11).setCellValue(device.getCreatedTime() != null ? 
-                device.getCreatedTime().atZone(ZoneId.systemDefault())
+                device.getCreatedTime().atZone(VIETNAM_ZONE)
                     .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")) : "");
             row.createCell(12).setCellValue(device.getUpdatedTime() != null ? 
-                device.getUpdatedTime().atZone(ZoneId.systemDefault())
+                device.getUpdatedTime().atZone(VIETNAM_ZONE)
                     .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")) : "");
             row.createCell(13).setCellValue(device.getClass().getSimpleName());
         }

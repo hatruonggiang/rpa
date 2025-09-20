@@ -190,6 +190,11 @@ tr:hover {
 }
 
 /* Column widths */
+.col-stt {
+    width: 60px;
+    text-align: center;
+    font-weight: bold;
+}
 .col-id {
     min-width: 300px;
     max-width: 300px;
@@ -237,6 +242,7 @@ tr:hover {
 .col-log {
     min-width: 500px;
     max-width: 500px;
+    max-height: 200px;
 }
 
 .col-time {
@@ -253,7 +259,7 @@ tr:hover {
 .col-log pre.log-cell {
     font-family: 'Courier New', monospace;
     font-size: 10px;
-    max-height: 400px;
+    max-height: 50px;
     max-width: fit-content;
     overflow-y: auto;
     background-color: #f8f8f8;
