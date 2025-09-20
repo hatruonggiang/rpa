@@ -283,8 +283,8 @@ private boolean checkKeyInJsonLog(String jsonLog, String targetKey) {
         // Tạo hàng header
         Row headerRow = sheet.createRow(0);
         String[] headers = {
-            "ID", "Serial", "Mã thiết bị", "Loại thiết bị", "MAC HC", "Phiên bản FW", 
-            "Trạng thái test case", "Loại", "Lệnh", "RQI", "Log", "Thời gian tạo", "Thời gian cập nhật", "Class"
+            "ID", "Serial", "deviceCode", "deviceType", "macHc", "fwVersion", 
+            "statusTestCase", "Type", "cmd", "rai", "log", "createdTime", "updatedTime", "class"
         };
         
         for (int i = 0; i < headers.length; i++) {
@@ -317,7 +317,7 @@ private boolean checkKeyInJsonLog(String jsonLog, String targetKey) {
             row.createCell(12).setCellValue(device.getUpdatedTime() != null ? 
                 device.getUpdatedTime().atZone(VIETNAM_ZONE)
                     .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")) : "");
-            row.createCell(13).setCellValue(device.getClass().getSimpleName());
+            row.createCell(13).setCellValue(device.getClass().getName());
         }
         
         // Tự động điều chỉnh độ rộng cột
